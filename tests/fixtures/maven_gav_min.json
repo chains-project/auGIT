@@ -1,0 +1,10 @@
+{
+  "response": {
+    "numFound": 2,
+    "docs": [
+      { "v": "1.0.0", "timestamp": 1609459200000, "p": "jar", "scm": "https://example.com/scm" },
+      { "v": "2.0.0", "timestamp": 1640995200000, "p": "jar", "scm": "https://example.com/scm" }
+    ]
+  }
+}
+

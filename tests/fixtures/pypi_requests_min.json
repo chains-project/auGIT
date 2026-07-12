@@ -1,0 +1,16 @@
+{
+  "info": {
+    "name": "requests",
+    "package_url": "https://pypi.org/project/requests/",
+    "requires_python": ">=3.9"
+  },
+  "releases": {
+    "1.0.0": [
+      { "upload_time_iso_8601": "2020-01-01T00:00:00Z" }
+    ],
+    "2.0.0": [
+      { "upload_time_iso_8601": "2021-01-01T00:00:00Z" }
+    ]
+  }
+}
+

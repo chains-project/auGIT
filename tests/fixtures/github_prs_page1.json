@@ -1,0 +1,27 @@
+[
+  {
+    "number": 12,
+    "state": "closed",
+    "created_at": "2026-05-01T10:00:00Z",
+    "updated_at": "2026-05-03T10:00:00Z",
+    "closed_at": "2026-05-03T10:00:00Z",
+    "merged_at": "2026-05-03T10:00:00Z",
+    "user": { "login": "alice" },
+    "merge_commit_sha": "abc",
+    "base": { "ref": "main" },
+    "head": { "sha": "def", "repo": { "full_name": "org/repo" } }
+  },
+  {
+    "number": 11,
+    "state": "open",
+    "created_at": "2026-04-01T10:00:00Z",
+    "updated_at": "2026-04-02T10:00:00Z",
+    "closed_at": null,
+    "merged_at": null,
+    "user": { "login": "bob" },
+    "merge_commit_sha": null,
+    "base": { "ref": "main" },
+    "head": { "sha": "111", "repo": { "full_name": "org/repo" } }
+  }
+]
+

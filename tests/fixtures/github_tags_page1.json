@@ -1,0 +1,5 @@
+[
+  { "name": "v1.0.0", "commit": { "sha": "abc" } },
+  { "name": "v1.1.0", "commit": { "sha": "def" } }
+]
+

@@ -1,0 +1,205 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Trust report — {{ repo_url }}</title>
+  <style>
+    :root {
+      --bg: #f6f7f9;
+      --card: #fff;
+      --text: #1a1d21;
+      --muted: #5c6570;
+      --border: #e2e6ea;
+    }
+    * { box-sizing: border-box; }
+    body {
+      font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      margin: 0;
+      line-height: 1.5;
+    }
+    .wrap { max-width: 52rem; margin: 0 auto; padding: 1.5rem 1rem 3rem; }
+    header { margin-bottom: 1.5rem; }
+    h1 { font-size: 1.35rem; font-weight: 600; margin: 0 0 0.25rem; }
+    .meta { color: var(--muted); font-size: 0.9rem; }
+    .meta strong { font-weight: 600; }
+    .summary-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(8rem, 1fr));
+      gap: 0.75rem;
+      margin: 1.25rem 0;
+    }
+    .stat {
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 0.75rem 1rem;
+    }
+    .stat strong { display: block; font-size: 1.4rem; }
+    .stat span { font-size: 0.8rem; color: var(--muted); }
+    section { margin-top: 1.75rem; }
+    h2 { font-size: 1rem; font-weight: 600; margin: 0 0 0.75rem; }
+    .finding {
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 1rem 1.1rem;
+      margin-bottom: 0.75rem;
+    }
+    .finding-head {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: baseline;
+      gap: 0.5rem;
+      margin-bottom: 0.35rem;
+    }
+    .finding h3 { font-size: 0.95rem; margin: 0; font-weight: 600; }
+    .metric-tag { font-size: 0.75rem; color: var(--muted); }
+    .finding p { margin: 0.35rem 0 0; color: var(--text); font-size: 0.9rem; }
+    ul.evidence {
+      margin: 0.5rem 0 0;
+      padding-left: 1.2rem;
+      font-size: 0.85rem;
+      color: var(--muted);
+    }
+    .category-block { margin-bottom: 1.5rem; }
+    h3.category-title {
+      font-size: 0.95rem;
+      font-weight: 600;
+      margin: 0 0 0.5rem;
+      text-transform: capitalize;
+    }
+    .baseline-banner {
+      background: #f0f2f5;
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      padding: 0.65rem 0.85rem;
+      margin-bottom: 0.75rem;
+      font-size: 0.85rem;
+      color: var(--muted);
+    }
+    .baseline-banner strong {
+      display: block;
+      font-size: 0.75rem;
+      text-transform: uppercase;
+      letter-spacing: 0.03em;
+      color: var(--text);
+      margin-bottom: 0.35rem;
+    }
+    .baseline-banner ul {
+      margin: 0;
+      padding-left: 1.2rem;
+    }
+    .empty {
+      color: var(--muted);
+      font-size: 0.9rem;
+      padding: 0.75rem 0;
+    }
+    .catalog {
+      font-size: 0.85rem;
+      color: var(--muted);
+    }
+    .catalog dt { font-weight: 600; color: var(--text); margin-top: 0.5rem; }
+    .catalog dd { margin: 0.15rem 0 0 0; }
+    footer {
+      margin-top: 2rem;
+      font-size: 0.8rem;
+      color: var(--muted);
+      border-top: 1px solid var(--border);
+      padding-top: 1rem;
+    }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <header>
+      <h1>Trust report</h1>
+      <p class="meta"><a href="{{ repo_url }}">{{ repo_url }}</a></p>
+      <p class="meta">Generated {{ generated_at }}</p>
+      <p class="meta">Audit mode: <strong>{{ audit_mode }}</strong> · Compare window: {{ compare_window_label }} (tail {{ tail_days }}d)</p>
+      {% if checkpoint_label != "none" %}
+      <p class="meta">Checkpoint: {{ checkpoint_label }}</p>
+      {% endif %}
+      {% if last_report_label %}
+      <p class="meta">Previous report: {{ last_report_label }}{% if last_report_status %} ({{ last_report_status }}){% endif %}</p>
+      {% endif %}
+      {% if last_integrity_label %}
+      <p class="meta">Last integrity check: {{ last_integrity_label }}{% if last_integrity_summary and last_integrity_summary.get('drift_events_detected') is not none %} · drift events detected: {{ last_integrity_summary.get('drift_events_detected') }}{% endif %}</p>
+      {% endif %}
+      {% if profile_frozen %}
+      <p class="meta">Profile frozen due to integrity drift in compare window.</p>
+      {% endif %}
+      {% if finding_count %}
+      <p class="meta"><strong>{{ finding_count }} finding(s)</strong></p>
+      {% else %}
+      <p class="meta">No findings</p>
+      {% endif %}
+    </header>
+
+    <div class="summary-grid">
+      <div class="stat"><strong>{{ finding_count }}</strong><span>Findings</span></div>
+      <div class="stat"><strong>{{ compare_window_events }} / {{ total_events }}</strong><span>window / total events</span></div>
+      <div class="stat"><strong>{{ coverage_label }}</strong><span>Log coverage</span></div>
+    </div>
+
+    <section>
+      <h2>Findings</h2>
+      {% if finding_sections %}
+        {% for section in finding_sections %}
+        <div class="category-block">
+          <h3 class="category-title">{{ section.label }}</h3>
+          {% if section.baseline %}
+          <div class="baseline-banner">
+            <strong>Baseline</strong>
+            <ul>
+              {% for line in section.baseline %}
+              <li>{{ line }}</li>
+              {% endfor %}
+            </ul>
+          </div>
+          {% endif %}
+          {% for f in section.findings %}
+          <article class="finding">
+            <div class="finding-head">
+              <h3>{{ f.title }}</h3>
+              <span class="metric-tag">{{ f.metric_label }}</span>
+            </div>
+            <p>{{ f.summary }}</p>
+            {% if f.evidence %}
+            <ul class="evidence">
+              {% for line in f.evidence %}
+              <li>{{ line }}</li>
+              {% endfor %}
+            </ul>
+            {% endif %}
+          </article>
+          {% endfor %}
+        </div>
+        {% endfor %}
+      {% else %}
+        <p class="empty">No trust signals above the report thresholds. Run <code>collect</code> and <code>check</code> if the log is empty or stale.</p>
+      {% endif %}
+    </section>
+
+    <section>
+      <h2>Registered trust signals</h2>
+      <dl class="catalog">
+        {% for m in metrics_catalog %}
+        <dt>{{ m.label }} <span class="metric-tag">{{ m.category }}</span></dt>
+        <dd>{{ m.description }}</dd>
+        {% endfor %}
+      </dl>
+    </section>
+
+    <footer>
+      This report compares the <strong>compare window</strong> against a repository profile learned
+      from earlier log history (initial audit) or the last acknowledged checkpoint (re-audit).
+      History-integrity findings require a prior <code>augit check</code> run.
+      Use <code>report --as-of</code> for retrospective analysis and <code>--acknowledge</code>
+      to advance the checkpoint after accepting risk.
+    </footer>
+  </div>
+</body>
+</html>

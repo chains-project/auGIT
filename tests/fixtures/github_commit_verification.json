@@ -1,0 +1,7 @@
+{
+  "verified": true,
+  "reason": "valid",
+  "signature": "-----BEGIN PGP SIGNATURE-----\n\nwsFcBAABCAAQBQJp6iA8CRC1aQ7uu5UhlAAAbh4QAGfFhDVURh+uCcJzzA69RhLd\nBJwBROaWMGNbieA3XpFN+awKRDoNYHijZtTfEZk+7yJUIYhlg5NQC20OpcuCQj/x\n3xtD2osAPV3zVE43GhQNoNhvOaIRKV/XMPm9nzdUiOXWzsyLLHh50hATWKq8jtgC\n6lgfvw/U8U2J7Mx/N7otzTC3gisoApWSTYTdHuxZ+KbeEqkgjdahnM4lReWcu7xu\n5bL+S8K8pFaAZmmAMb5+Ngi2CjdrJQK+ks+raer4ypsxz07dJhTW4cHCylu1WnUq\n8nXgzPImutsKo0HbK5yOlhmWvhO08OnZkj1/GrW06mrmGG1xHIspF200AQAmtwyg\nLtrSOn93r8IDSAbtOwcfUGDLsuPf9mNsuPP6Jbjesxjl4KffPSpTfZVbJidfh1i/\nA+3113Pxh1JtOUOEeIkHwlk98OJmmmL3CA+49UmjKAx+yIhSEZ8f1CGvvAxY2qq4\nCZ8M1NnrOqAKub1XDKXClrmRLmJEpCLow1wl3MN53GZZzLxyWHk+RHG4NhvaGbcj\nXPftlgq/yk/a6qC9YH4V3KNJ9UGUCC1S1K220H21QTp1o05PstAlsxdRhGgvUhe1\nwlPOzpBuGz7vkS3BNmYXLpt8x9TrsKDxvVQWffviYPlYdWUOnmMZF6buCVxXEolY\nsK/f7bx1hKuv7ltk/NEP\n=8qFN\n-----END PGP SIGNATURE-----\n",
+  "payload": "tree d37e8eb936fcfb712beeb11e012d875187d18e56\nparent 053d459689b928cde68a1fdb9411a8539dc4f2b1\nauthor fz-rh <fzimandl@redhat.com> 1776951356 +0200\ncommitter GitHub <noreply@github.com> 1776951356 +0200\n\n\u2728 feat: resolve parent POMs and their BOMs (#1540)\n\nSigned-off-by: Filip Zimandl <fzimandl@redhat.com>\nCo-authored-by: Timotej Kubas <tkubas@redhat.com>",
+  "verified_at": "2026-04-23T13:35:56Z"
+}

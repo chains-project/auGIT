@@ -1,0 +1,14 @@
+[
+  {
+    "sha": "aaa111",
+    "commit": {
+      "author": { "email": "a@example.com", "date": "2026-05-01T10:00:00Z" },
+      "committer": { "email": "c@example.com", "date": "2026-05-01T10:10:00Z" },
+      "message": "Fix thing\\n\\nBody",
+      "verification": { "verified": true }
+    },
+    "author": { "login": "alice" },
+    "committer": { "login": "bot" }
+  }
+]
+

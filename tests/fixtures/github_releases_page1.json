@@ -1,0 +1,13 @@
+[
+  {
+    "id": 99,
+    "tag_name": "v1.0.0",
+    "target_commitish": "main",
+    "published_at": "2026-05-10T12:00:00Z",
+    "created_at": "2026-05-10T11:00:00Z",
+    "author": { "login": "releasebot" },
+    "draft": false,
+    "prerelease": false
+  }
+]
+
