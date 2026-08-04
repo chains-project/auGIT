@@ -41,18 +41,26 @@ class NewDependencyIntroductionMetric(TrustMetric):
                 if dep_str not in profile.dependency_edges:
                     new_edges.add(dep_str)
                     pr_num = change.get("pr_number")
+                    sha = str(change.get("commit_sha") or "")
+                    sha_short = sha[:8] if sha else "?"
+                    if pr_num is not None:
+                        where = f"commit {sha_short}, PR #{pr_num}"
+                        observed = (
+                            f"added by {author} in PR #{pr_num} on {format_dt(dt)}"
+                        )
+                    else:
+                        where = f"commit {sha_short}"
+                        observed = (
+                            f"added by {author} in commit {sha_short} on {format_dt(dt)}"
+                        )
                     evidence.append(
-                        f"{author}: added {dep_str} "
-                        f"(commit {str(change.get('commit_sha', ''))[:8]}, "
-                        f"PR #{pr_num}) on {format_dt(dt)}"
+                        f"{author}: added {dep_str} ({where}) on {format_dt(dt)}"
                     )
                     comparisons.append(
                         ComparisonRow(
                             subject=dep_str,
                             baseline=baseline_edges or "no known direct dependencies",
-                            observed=(
-                                f"added by {author} in PR #{pr_num} on {format_dt(dt)}"
-                            ),
+                            observed=observed,
                         )
                     )
 

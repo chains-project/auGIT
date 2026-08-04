@@ -4,7 +4,6 @@ version = "0.1.0"
 description = "Append-only supply-chain audit log for GitHub, PyPI, and Maven"
 readme = "README.md"
 license = "MIT"
-license-files = ["LICENSE"]
 authors = [
     { name = "Adrian Thees", email = "adrian.thees@t-online.de" }
 ]

@@ -49,6 +49,7 @@ class RepositoryProfile(BaseModel):
     pr_review: PrReviewProfile = Field(default_factory=PrReviewProfile)
     integration_mode: IntegrationMode = IntegrationMode.MIXED
     pr_merge_shas: set[str] = Field(default_factory=set)
+    direct_push_authors: set[str] = Field(default_factory=set)
     release_baseline: ReleaseBaseline = Field(default_factory=ReleaseBaseline)
     release_publishers_github: set[str] = Field(default_factory=set)
     release_publishers_registry: set[str] = Field(default_factory=set)
@@ -83,6 +84,7 @@ class RepositoryProfile(BaseModel):
             "pr_review": self.pr_review.model_dump(),
             "integration_mode": self.integration_mode.value,
             "pr_merge_shas": sorted(self.pr_merge_shas),
+            "direct_push_authors": sorted(self.direct_push_authors),
             "release_baseline": self.release_baseline.model_dump(),
             "release_publishers_github": sorted(self.release_publishers_github),
             "release_publishers_registry": sorted(self.release_publishers_registry),
@@ -116,6 +118,7 @@ class RepositoryProfile(BaseModel):
             pr_review=PrReviewProfile(**(raw.get("pr_review") or {})),
             integration_mode=IntegrationMode(raw.get("integration_mode", "mixed")),
             pr_merge_shas=set(raw.get("pr_merge_shas") or []),
+            direct_push_authors=set(raw.get("direct_push_authors") or []),
             release_baseline=ReleaseBaseline(**(raw.get("release_baseline") or {})),
             release_publishers_github=set(raw.get("release_publishers_github") or []),
             release_publishers_registry=set(
@@ -281,6 +284,9 @@ def build_profile(
             pr_linked += 1
         else:
             direct += 1
+            author = (commit.get("author_login") or "").strip()
+            if author:
+                profile.direct_push_authors.add(author)
     if pr_linked > 0 and direct == 0:
         profile.integration_mode = IntegrationMode.PR_REVIEWED
     elif direct > 0 and pr_linked == 0:

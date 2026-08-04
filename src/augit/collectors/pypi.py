@@ -57,8 +57,8 @@ def fetch_pypi_json(name: str) -> dict[str, Any]:
         with urllib.request.urlopen(req) as resp:
             return json.loads(resp.read().decode("utf-8"))
     except urllib.error.HTTPError as e:
-        # Some incident-case projects (e.g. ctx) are removed and name-blocked by PyPI
-        # admins, which returns 404 for the JSON endpoint. Treat this as "no data".
+        # Removed or name-blocked packages return 404 for the JSON endpoint.
+        # Treat this as "no data".
         if e.code == 404:
             return {"_augit_missing": True, "info": {"name": name}, "releases": {}}
         raise

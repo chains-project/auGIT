@@ -50,9 +50,10 @@ augit export owner/repo --out events.jsonl
 | Command | Description |
 |---------|-------------|
 | `db init --path PATH` | Initialize SQLite schema |
-| `collect github REPO [--sources all\|prs,commits,...]` | Incremental GitHub collection |
-| `collect pypi NAME` | PyPI version events (+ auto GitHub link) |
-| `collect maven GAV` | Maven version events (+ auto GitHub link) |
+| `collect auto TARGET` | Resolve GitHub↔registry link and collect both sides |
+| `collect github REPO [--sources ...] [--follow]` | Incremental GitHub collection |
+| `collect pypi NAME [--no-follow]` | PyPI version events (+ linked GitHub by default) |
+| `collect maven GAV [--no-follow]` | Maven version events (+ linked GitHub by default) |
 | `report REPO --out FILE` | HTML trust report from audit log |
 | `check REPO` | Optional integrity check: compare recorded audit trail vs live refetch |
 | `link pypi NAME` / `link maven GAV` | Resolve package → GitHub URL |
@@ -76,7 +77,7 @@ Global option: `--db PATH` (or `SSC_AUDIT_DB`).
 
 **Advance checkpoint:** `report --acknowledge` after accepting the report.
 
-**Retrospective analysis:** `report --as-of 2018-10-01T00:00:00Z` fixes the compare window end for incident-aligned evaluation.
+**Retrospective analysis:** `report --as-of 2018-10-01T00:00:00Z` fixes the compare window end for a point-in-time audit.
 
 ### Check
 
@@ -99,9 +100,21 @@ Compares the **recorded audit trail** (from `collect`) against a **live refetch*
 
 **Pull requests** are collected via the **GitHub GraphQL API** (batched metadata including review counts). This requires a valid `GITHUB_TOKEN` with repository read access. Commits, releases, tags, and dependencies still use the REST API.
 
-The `dependencies` source parses manifest diffs on recently merged PRs (`package.json`, `requirements.txt`, `pom.xml`, etc.) and appends `dependency_manifest_change` events.
+The `dependencies` source finds ecosystem manifest changes on recently merged PRs **and** on commits that touch `package.json`, `requirements.txt`, `pyproject.toml`, or `pom.xml`, then appends `dependency_manifest_change` events. Direct edges are computed by comparing the full file at the parent commit vs the new commit (GitHub patch hunks alone are often incomplete JSON/XML). Lockfiles such as `package-lock.json` are ignored for edge detection.
 
-## PyPI → GitHub workflow
+## PyPI / Maven ↔ GitHub workflow
+
+`collect auto` accepts a GitHub repo **or** a registry package, resolves the link, and collects both sides:
+
+```bash
+augit collect auto psf/requests              # GitHub → discover PyPI → collect both
+augit collect auto requests                  # PyPI → link GitHub → collect both
+augit collect auto pypi:ultralytics
+augit collect auto com.google.guava:guava    # Maven GAV → link GitHub → collect both
+augit collect auto --no-follow requests      # registry only
+```
+
+Explicit forms still work. `collect pypi` / `collect maven` follow the linked GitHub repo by default (`--no-follow` to skip). `collect github --follow` discovers linked packages.
 
 ```bash
 augit collect pypi requests
@@ -123,17 +136,27 @@ This clears events, cursors, integrity snapshots, package links, and checkpoints
 
 ## Evaluation / benchmarks
 
-[`eval-benchmarks.sh`](eval-benchmarks.sh) runs retrospective audits against known supply-chain incidents and negative controls. It requires `GITHUB_TOKEN` and generates HTML reports for manual review.
+[`eval-benchmarks.sh`](eval-benchmarks.sh) runs retrospective audits against documented supply-chain incidents (one primary metric per case). It requires `GITHUB_TOKEN` and writes HTML reports for manual review.
 
 ```bash
 export GITHUB_TOKEN=ghp_...
 ./eval-benchmarks.sh init
-./eval-benchmarks.sh positives    # incident cases
-./eval-benchmarks.sh negatives    # control cases
-./eval-benchmarks.sh all
+./eval-benchmarks.sh positives
+# or a single case, e.g.:
+./eval-benchmarks.sh p1-trivy
 ```
 
 Reports are written to `./eval-reports/` by default. Override paths with `EVAL_DB` and `EVAL_OUT`.
+
+| ID | Primary metric | Target | `as-of` (postmortem) |
+|----|----------------|--------|----------------------|
+| p1 | Contributor identity | `aquasecurity/trivy-action` | 2026-03-20 |
+| p2 | Irregular commits | `Tiledesk/tiledesk-server` | 2026-05-21 |
+| p3 | Onboarding | `tukaani-project/xz` | 2024-03-29 |
+| p4 | Ownership changes | PyPI `ctx` | 2022-05-24 |
+| p5–p6, p8 | Role / publishers / dependency | `dominictarr/event-stream` | 2018-11-26 |
+| p7 | Unusual release pattern | `XanaduAI/MrMustard` + PyPI | 2026-07-24 |
+| p9 | History integrity | `tj-actions/changed-files` | 2025-03-15 |
 
 ## Development
 

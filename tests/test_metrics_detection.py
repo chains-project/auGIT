@@ -353,6 +353,123 @@ def test_irregular_commits_skips_merge_commit_from_recent_pr():
     assert commit_findings == []
 
 
+def test_irregular_commits_direct_push_allows_known_author():
+    now = datetime(2026, 5, 1, tzinfo=UTC)
+    baseline = (now - timedelta(days=200)).isoformat().replace("+00:00", "Z")
+    recent = (now - timedelta(days=10)).isoformat().replace("+00:00", "Z")
+    timeline = load_timeline(
+        [
+            _row(
+                "github_commit",
+                {"sha": "aaa111111111111111111111111111111111111111", "author_login": "alice"},
+                baseline,
+            ),
+            _row(
+                "github_commit",
+                {"sha": "bbb222222222222222222222222222222222222222", "author_login": "alice"},
+                recent,
+            ),
+        ]
+    )
+    context = resolve_audit_context(
+        mode="initial",
+        timeline=timeline,
+        tail_days=DEFAULT_TAIL_DAYS,
+        as_of=now,
+    )
+    assert context.baseline_profile.integration_mode.value == "direct_push_ok"
+    assert "alice" in context.baseline_profile.direct_push_authors
+    findings = detect_findings(timeline, context)
+    commit_findings = [
+        f
+        for f in findings
+        if f.metric_id == "irregular_commits"
+        and f.title == "Commit without usual integration path"
+    ]
+    assert commit_findings == []
+
+
+def test_irregular_commits_direct_push_flags_new_author():
+    now = datetime(2026, 5, 1, tzinfo=UTC)
+    baseline = (now - timedelta(days=200)).isoformat().replace("+00:00", "Z")
+    recent = (now - timedelta(days=10)).isoformat().replace("+00:00", "Z")
+    timeline = load_timeline(
+        [
+            _row(
+                "github_commit",
+                {"sha": "aaa111111111111111111111111111111111111111", "author_login": "alice"},
+                baseline,
+            ),
+            _row(
+                "github_commit",
+                {
+                    "sha": "ccc333333333333333333333333333333333333333",
+                    "author_login": "attacker",
+                },
+                recent,
+            ),
+        ]
+    )
+    context = resolve_audit_context(
+        mode="initial",
+        timeline=timeline,
+        tail_days=DEFAULT_TAIL_DAYS,
+        as_of=now,
+    )
+    findings = detect_findings(timeline, context)
+    commit_findings = [
+        f
+        for f in findings
+        if f.metric_id == "irregular_commits"
+        and f.title == "Commit without usual integration path"
+    ]
+    assert len(commit_findings) == 1
+    assert "attacker" in "\n".join(commit_findings[0].evidence)
+
+
+def test_irregular_commits_flags_null_login_under_direct_push():
+    now = datetime(2026, 5, 1, tzinfo=UTC)
+    baseline = (now - timedelta(days=200)).isoformat().replace("+00:00", "Z")
+    recent = (now - timedelta(days=10)).isoformat().replace("+00:00", "Z")
+    malicious_sha = "acac5a9854650c4ae2883c4740bf87d34120c038"
+    timeline = load_timeline(
+        [
+            _row(
+                "github_commit",
+                {"sha": "aaa111111111111111111111111111111111111111", "author_login": "alice"},
+                baseline,
+            ),
+            _row(
+                "github_commit",
+                {
+                    "sha": malicious_sha,
+                    "author_login": None,
+                    "committer_login": None,
+                    "author_email": "build-system@noreply.dev",
+                },
+                recent,
+            ),
+        ]
+    )
+    context = resolve_audit_context(
+        mode="initial",
+        timeline=timeline,
+        tail_days=DEFAULT_TAIL_DAYS,
+        as_of=now,
+    )
+    findings = detect_findings(timeline, context)
+    commit_findings = [
+        f
+        for f in findings
+        if f.metric_id == "irregular_commits"
+        and f.title == "Commit without usual integration path"
+    ]
+    assert len(commit_findings) == 1
+    evidence = "\n".join(commit_findings[0].evidence)
+    assert "unlinked author" in evidence
+    assert malicious_sha[:8] in evidence
+
+
 def test_onboarding_uses_nonzero_baseline_when_most_prs_store_zero_reviews():
     now = datetime(2026, 5, 1, tzinfo=UTC)
     old = (now - timedelta(days=200)).isoformat().replace("+00:00", "Z")

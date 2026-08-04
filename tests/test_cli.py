@@ -301,7 +301,7 @@ def test_collect_pypi_inserts_version_events(tmp_path, monkeypatch):
 
     result = runner.invoke(
         app,
-        ["--db", str(db_path), "collect", "pypi", "requests"],
+        ["--db", str(db_path), "collect", "pypi", "requests", "--no-follow"],
     )
     assert result.exit_code == 0
 
@@ -319,6 +319,50 @@ def test_collect_pypi_inserts_version_events(tmp_path, monkeypatch):
     assert all(e["event_type"] == "pypi_release_version" for e in events)
 
 
+def test_collect_auto_pypi_follows_github(tmp_path, monkeypatch):
+    db_path = tmp_path / "audit.db"
+    runner.invoke(app, ["db", "init", "--path", str(db_path)])
+
+    fixture = Path(__file__).parent / "fixtures" / "pypi_requests_min.json"
+    data = json.loads(fixture.read_text("utf-8"))
+    data["info"]["home_page"] = "https://github.com/psf/requests"
+    data["info"]["project_urls"] = {"Repository": "https://github.com/psf/requests"}
+    monkeypatch.setattr(
+        "augit.collectors.pypi.fetch_pypi_json",
+        lambda _name: data,
+    )
+    monkeypatch.setattr(
+        "augit.package_links.fetch_pypi_json",
+        lambda _name: data,
+    )
+
+    class FakeClient:
+        @classmethod
+        def from_env(cls):
+            return cls()
+
+    monkeypatch.setattr(
+        "augit.collect_linked.GitHubClient",
+        FakeClient,
+    )
+    monkeypatch.setattr(
+        "augit.collect_linked.collect_github_sources",
+        lambda store, client, repo_key, sources: type(
+            "R",
+            (),
+            {"inserted_by_source": {"prs": 1}, "run_ids": [1]},
+        )(),
+    )
+
+    result = runner.invoke(
+        app,
+        ["--db", str(db_path), "collect", "auto", "requests", "--sources", "prs"],
+    )
+    assert result.exit_code == 0, result.stdout + result.stderr
+    assert "pypi pypi:requests" in result.stdout
+    assert "github https://github.com/psf/requests" in result.stdout
+
+
 def test_collect_maven_inserts_version_events(tmp_path, monkeypatch):
     db_path = tmp_path / "audit.db"
     runner.invoke(app, ["db", "init", "--path", str(db_path)])
@@ -332,7 +376,7 @@ def test_collect_maven_inserts_version_events(tmp_path, monkeypatch):
 
     result = runner.invoke(
         app,
-        ["--db", str(db_path), "collect", "maven", "com.example:demo"],
+        ["--db", str(db_path), "collect", "maven", "com.example:demo", "--no-follow"],
     )
     assert result.exit_code == 0
 

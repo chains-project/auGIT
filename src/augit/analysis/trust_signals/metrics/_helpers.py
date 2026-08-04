@@ -32,6 +32,20 @@ def summarize_baseline_by_category(profile: RepositoryProfile) -> dict[str, list
                 f"{pr.median_reviews:.0f} reviews ({pr.merged_pr_count} merged PRs in profile)"
             ),
             f"Merged PR authors in profile: {len(profile.merged_pr_authors)}",
+            (
+                f"Known direct-push authors: {len(profile.direct_push_authors)}"
+                + (
+                    f" ({', '.join(sorted(profile.direct_push_authors)[:8])}"
+                    + (
+                        f", …"
+                        if len(profile.direct_push_authors) > 8
+                        else ""
+                    )
+                    + ")"
+                    if profile.direct_push_authors
+                    else ""
+                )
+            ),
             f"Authors with signing history: {signing_authors}",
         ],
         "governance": [

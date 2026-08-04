@@ -345,6 +345,23 @@ class EventStore:
             return None
         return RepoKey(canonical_url=link["github_canonical_url"], provider="github")
 
+    def get_packages_for_github(self, github_key: RepoKey) -> list[RepoKey]:
+        """Return package RepoKeys linked to this GitHub repository."""
+        github_repo_id = self.ensure_repo(github_key)
+        rows = self.conn.execute(
+            """
+            SELECT r.canonical_url, r.provider
+            FROM package_links pl
+            JOIN repositories r ON r.id = pl.package_repo_id
+            WHERE pl.github_repo_id=?;
+            """,
+            (github_repo_id,),
+        ).fetchall()
+        return [
+            RepoKey(canonical_url=row["canonical_url"], provider=row["provider"])
+            for row in rows
+        ]
+
     def get_audit_state(self, repo: RepoKey) -> AuditState | None:
         repo_id = self.ensure_repo(repo)
         row = self.conn.execute(

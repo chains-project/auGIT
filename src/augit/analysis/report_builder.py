@@ -160,6 +160,7 @@ def _snapshot_profile_for_checkpoint(
     merged.privileged_releasers |= fresh.privileged_releasers
     merged.merged_pr_authors |= fresh.merged_pr_authors
     merged.pr_merge_shas |= fresh.pr_merge_shas
+    merged.direct_push_authors |= fresh.direct_push_authors
     merged.release_publishers_github |= fresh.release_publishers_github
     merged.release_publishers_registry |= fresh.release_publishers_registry
     merged.dependency_edges |= fresh.dependency_edges

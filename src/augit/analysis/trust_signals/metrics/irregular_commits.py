@@ -56,39 +56,76 @@ class IrregularCommitsMetric(TrustMetric):
                 )
             )
 
+        known_merge_shas = set(profile.pr_merge_shas)
+        for pr in timeline.merged_prs:
+            for key in ("merge_commit_sha", "head_sha"):
+                sha = pr.get(key)
+                if sha:
+                    known_merge_shas.add(sha)
+
         commit_evidence: list[str] = []
         commit_comparisons: list[ComparisonRow] = []
-        if profile.integration_mode != IntegrationMode.DIRECT_PUSH_OK:
-            known_merge_shas = set(profile.pr_merge_shas)
-            for pr in timeline.merged_prs:
-                for key in ("merge_commit_sha", "head_sha"):
-                    sha = pr.get(key)
-                    if sha:
-                        known_merge_shas.add(sha)
+        for commit in timeline.commits:
+            sha = commit.get("sha")
+            author = (commit.get("author_login") or "").strip() or None
+            dt = commit.get("committed_dt")
+            if not sha or not dt:
+                continue
+            if sha in known_merge_shas:
+                continue
 
-            # Baseline indicates direct push is normal; commit irregularities are not suspicious there.
-            for commit in timeline.commits:
-                sha = commit.get("sha")
-                author = commit.get("author_login")
-                dt = commit.get("committed_dt")
-                if not sha or not author or not dt:
-                    continue
-                if sha in known_merge_shas:
-                    continue
-                if profile.integration_mode == IntegrationMode.PR_REVIEWED:
-                    commit_evidence.append(
-                        f"{author}: commit {sha[:8]} on {format_dt(dt)} not linked to a merged PR"
+            if author is None:
+                commit_evidence.append(
+                    f"unlinked author: commit {sha[:8]} on {format_dt(dt)} "
+                    f"(no GitHub user)"
+                )
+                commit_comparisons.append(
+                    ComparisonRow(
+                        subject=f"commit {sha[:8]} (unlinked author)",
+                        baseline=(
+                            "commits expected to have a linked GitHub identity; "
+                            f"known direct pushers: "
+                            f"{', '.join(sorted(profile.direct_push_authors)[:8]) or 'none'}"
+                        ),
+                        observed=f"direct commit on {format_dt(dt)} with null author_login",
                     )
-                    commit_comparisons.append(
-                        ComparisonRow(
-                            subject=f"commit {sha[:8]} ({author})",
-                            baseline=(
-                                f"integration mode={profile.integration_mode.value}; "
-                                f"commits expected via merged PR"
-                            ),
-                            observed=f"direct commit on {format_dt(dt)} (not in PR merge SHAs)",
-                        )
+                )
+                continue
+
+            if profile.integration_mode == IntegrationMode.PR_REVIEWED:
+                commit_evidence.append(
+                    f"{author}: commit {sha[:8]} on {format_dt(dt)} not linked to a merged PR"
+                )
+                commit_comparisons.append(
+                    ComparisonRow(
+                        subject=f"commit {sha[:8]} ({author})",
+                        baseline=(
+                            f"integration mode={profile.integration_mode.value}; "
+                            f"commits expected via merged PR"
+                        ),
+                        observed=f"direct commit on {format_dt(dt)} (not in PR merge SHAs)",
                     )
+                )
+                continue
+
+            # DIRECT_PUSH_OK or MIXED: allow known baseline direct pushers.
+            if author in profile.direct_push_authors:
+                continue
+            commit_evidence.append(
+                f"{author}: commit {sha[:8]} on {format_dt(dt)} "
+                f"(new direct pusher; not seen in baseline)"
+            )
+            commit_comparisons.append(
+                ComparisonRow(
+                    subject=f"commit {sha[:8]} ({author})",
+                    baseline=(
+                        f"integration mode={profile.integration_mode.value}; "
+                        f"known direct pushers: "
+                        f"{', '.join(sorted(profile.direct_push_authors)[:8]) or 'none'}"
+                    ),
+                    observed=f"direct commit on {format_dt(dt)} by login not in baseline",
+                )
+            )
 
         drafts: list[SignalDraft] = []
         if self_merge_evidence:
@@ -106,7 +143,7 @@ class IrregularCommitsMetric(TrustMetric):
                     title="Commit without usual integration path",
                     summary=(
                         "Commits in the compare window that are not linked to a merged pull request "
-                        "while the profile indicates PR-based integration is normal."
+                        "and deviate from the project's usual integration path or known direct pushers."
                     ),
                     evidence=commit_evidence[:10],
                     comparisons=commit_comparisons[:10],
