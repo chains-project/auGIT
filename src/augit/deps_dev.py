@@ -16,7 +16,7 @@ DEPS_DEV_BASE = "https://api.deps.dev/v3"
 
 @dataclass(frozen=True)
 class DepsDevPackage:
-    system: str  # PYPI | MAVEN | ...
+    system: str  # PYPI | MAVEN | NPM | ...
     name: str  # PyPI name or Maven group:artifact
 
 
@@ -44,7 +44,7 @@ def fetch_project_package_versions(github_key: RepoKey) -> list[DepsDevPackage]:
         vk = row.get("versionKey") or {}
         system = (vk.get("system") or "").upper()
         name = vk.get("name") or ""
-        if system not in {"PYPI", "MAVEN"} or not name:
+        if system not in {"PYPI", "MAVEN", "NPM"} or not name:
             continue
         key = (system, name)
         if key in seen:

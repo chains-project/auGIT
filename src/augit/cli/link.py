@@ -4,9 +4,9 @@ import typer
 
 from augit.cli.context import AppContext
 from augit.models import RepoKey
-from augit.package_links import link_maven_package, link_pypi_package
+from augit.package_links import link_maven_package, link_npm_package, link_pypi_package
 
-link_app = typer.Typer(help="Link PyPI/Maven packages to GitHub repositories")
+link_app = typer.Typer(help="Link PyPI, Maven, and npm packages to GitHub repositories")
 
 
 @link_app.command("pypi")
@@ -43,11 +43,28 @@ def link_maven(
         raise typer.Exit(code=1)
 
 
+@link_app.command("npm")
+def link_npm(
+    ctx: typer.Context,
+    name: str = typer.Argument(..., help="npm package name"),
+) -> None:
+    app_ctx: AppContext = ctx.obj
+    store = app_ctx.store
+    link = link_npm_package(store, name)
+    if link.linked:
+        typer.echo(
+            f"linked npm:{name} -> {link.github_key.canonical_url} ({link.source_field})"
+        )
+    else:
+        typer.echo(f"no github link found for npm:{name}")
+        raise typer.Exit(code=1)
+
+
 @link_app.command("show")
 def link_show(
     ctx: typer.Context,
-    package: str = typer.Argument(..., help="PyPI name or maven groupId:artifactId"),
-    provider: str = typer.Option(..., "--provider", help="pypi or maven"),
+    package: str = typer.Argument(..., help="PyPI name, npm name, or maven groupId:artifactId"),
+    provider: str = typer.Option(..., "--provider", help="pypi, maven, or npm"),
 ) -> None:
     app_ctx: AppContext = ctx.obj
     store = app_ctx.store

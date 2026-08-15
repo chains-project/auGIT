@@ -8,6 +8,7 @@ from augit.collectors.github_api import (
     github_repo_key,
 )
 from augit.collectors.maven import parse_gav
+from augit.collectors.npm import fetch_npm_json
 from augit.collectors.pypi import fetch_pypi_json
 from augit.deps_dev import fetch_project_package_versions
 from augit.models import RepoKey
@@ -47,6 +48,71 @@ def github_url_from_maven_scm(scm: str | None) -> tuple[str, str] | None:
     if canonical is None:
         return None
     return ("scm", canonical)
+
+
+def github_url_from_npm_repository(repo: str | dict[str, Any] | None) -> tuple[str, str] | None:
+    """Parse npm package.json-style repository field to (source_field, canonical_github_url)."""
+    if repo is None:
+        return None
+    raw: str | None
+    if isinstance(repo, dict):
+        raw = repo.get("url")
+    else:
+        raw = str(repo)
+    if not raw:
+        return None
+    s = raw.strip()
+    if s.lower().startswith("github:"):
+        slug = s.split(":", 1)[1].strip()
+        canonical = try_canonical_github_url(f"https://github.com/{slug}")
+        if canonical:
+            return ("repository", canonical)
+        return None
+    for prefix in (
+        "git+https://",
+        "git+ssh://",
+        "git://",
+        "git+http://",
+        "git:",
+        "https://",
+        "http://",
+    ):
+        if s.lower().startswith(prefix):
+            s = s[len(prefix) :]
+            break
+    if s.endswith(".git"):
+        s = s[:-4]
+    if s.startswith("github.com/"):
+        s = f"https://{s}"
+    canonical = try_canonical_github_url(s)
+    if canonical is None and s.count("/") == 1 and ":" not in s:
+        canonical = try_canonical_github_url(f"https://github.com/{s}")
+    if canonical is None:
+        return None
+    return ("repository", canonical)
+
+
+def github_urls_from_npm_data(data: dict[str, Any]) -> list[tuple[str, str]]:
+    out: list[tuple[str, str]] = []
+    parsed = github_url_from_npm_repository(data.get("repository"))
+    if parsed:
+        out.append(parsed)
+    versions = data.get("versions") or {}
+    latest = (data.get("dist-tags") or {}).get("latest")
+    if latest and latest in versions:
+        version_repo = (versions.get(latest) or {}).get("repository")
+        parsed_latest = github_url_from_npm_repository(version_repo)
+        if parsed_latest and parsed_latest not in out:
+            out.append(parsed_latest)
+    return out
+
+
+def npm_data_matches_github(data: dict[str, Any], github_key: RepoKey) -> bool:
+    want = github_key.canonical_url.rstrip("/").lower()
+    for _field, url in github_urls_from_npm_data(data):
+        if url.rstrip("/").lower() == want:
+            return True
+    return False
 
 
 def github_urls_from_pypi_info(info: dict[str, Any]) -> list[tuple[str, str]]:
@@ -213,6 +279,51 @@ def link_maven_package(
     )
 
 
+def link_npm_package(
+    store: EventStore,
+    package_name: str,
+    *,
+    npm_data: dict[str, Any] | None = None,
+) -> LinkResult:
+    pkg_key = RepoKey(canonical_url=package_name, provider="npm")
+    data = npm_data if npm_data is not None else fetch_npm_json(package_name)
+    if data.get("_augit_missing"):
+        return LinkResult(
+            linked=False,
+            package_key=pkg_key,
+            github_key=None,
+            source_field=None,
+            raw_url=None,
+        )
+    canonical_name = str(data.get("name") or package_name)
+    pkg_key = RepoKey(canonical_url=canonical_name, provider="npm")
+    candidates = github_urls_from_npm_data(data)
+    picked = pick_primary_github(candidates) or (candidates[0] if candidates else None)
+    if picked is None:
+        return LinkResult(
+            linked=False,
+            package_key=pkg_key,
+            github_key=None,
+            source_field=None,
+            raw_url=None,
+        )
+
+    source_field, canonical = picked
+    repo_field = data.get("repository")
+    raw = repo_field.get("url") if isinstance(repo_field, dict) else repo_field
+    github_key = RepoKey(canonical_url=canonical, provider="github")
+    store.upsert_package_link(
+        pkg_key, github_key, source_field=source_field, raw_url=str(raw or canonical)
+    )
+    return LinkResult(
+        linked=True,
+        package_key=pkg_key,
+        github_key=github_key,
+        source_field=source_field,
+        raw_url=str(raw or canonical),
+    )
+
+
 def _pypi_name_guesses(repo_slug: str) -> list[str]:
     """Candidate PyPI names derived from a GitHub owner/repo slug."""
     _owner, repo = repo_slug.split("/", 1)
@@ -236,7 +347,7 @@ def _pypi_name_guesses(repo_slug: str) -> list[str]:
 
 @dataclass(frozen=True)
 class DiscoveredPackage:
-    provider: str  # pypi | maven
+    provider: str  # pypi | maven | npm
     name: str  # package name or GAV
     source_field: str
     github_key: RepoKey
@@ -249,13 +360,13 @@ def discover_packages_for_github(
     max_packages: int = 5,
 ) -> list[DiscoveredPackage]:
     """
-    Find PyPI/Maven packages for a GitHub repo and upsert package_links.
+    Find PyPI, Maven, and npm packages for a GitHub repo and upsert package_links.
 
     Strategy:
     1. Guess PyPI name from the repo name; accept when metadata points back
        at this GitHub repo, or when the package exists and the name matches
        the repo name (covers packages with empty project_urls).
-    2. Query deps.dev for PYPI/MAVEN mappings; keep name-aligned packages
+    2. Query deps.dev for PYPI, MAVEN, and NPM mappings; keep name-aligned packages
        and those that verify via forward metadata.
     """
     slug = github_owner_repo(github_key)
@@ -322,11 +433,8 @@ def discover_packages_for_github(
             except ValueError:
                 continue
             if a.lower() != repo_name_l and not a.lower().startswith(repo_name_l):
-                # Still accept if only a few overall; skip noisy monorepo extras
-                # unless exact-ish match
                 if repo_name_l not in a.lower() and repo_name_l not in pkg.name.lower():
                     continue
-            # Confirm SCM when possible
             from augit.collectors.maven import fetch_maven_versions
 
             try:
@@ -341,5 +449,27 @@ def discover_packages_for_github(
             if parsed is None and a.lower() != repo_name_l:
                 continue
             add("maven", pkg.name, "deps.dev" if parsed is None else "deps.dev+scm")
+        elif pkg.system == "NPM":
+            name_l = pkg.name.lower()
+            data = fetch_npm_json(pkg.name)
+            if data.get("_augit_missing"):
+                continue
+            canonical_name = str(data.get("name") or pkg.name)
+            if name_l == repo_name_l or npm_data_matches_github(data, github_key):
+                add("npm", canonical_name, "deps.dev")
+
+    # 3) npm name heuristics (repo name match)
+    for guess in _pypi_name_guesses(slug):
+        if len(found) >= max_packages:
+            break
+        data = fetch_npm_json(guess)
+        if data.get("_augit_missing"):
+            continue
+        canonical_name = str(data.get("name") or guess)
+        if npm_data_matches_github(data, github_key):
+            add("npm", canonical_name, "npm_name_guess+repository")
+            continue
+        if canonical_name.lower() == repo_name_l and github_urls_from_npm_data(data):
+            add("npm", canonical_name, "npm_name_guess")
 
     return found

@@ -24,7 +24,7 @@ def register_report(app: typer.Typer) -> None:
         provider: str = typer.Option(
             "github",
             "--provider",
-            help="github (default), pypi, or maven",
+            help="github (default), pypi, maven, or npm",
         ),
         mode: str = typer.Option(
             "initial",

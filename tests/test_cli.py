@@ -392,3 +392,38 @@ def test_collect_maven_inserts_version_events(tmp_path, monkeypatch):
     conn.close()
     assert len(events) == 2
     assert all(e["event_type"] == "maven_release_version" for e in events)
+
+
+def test_collect_npm_inserts_version_events(tmp_path, monkeypatch):
+    db_path = tmp_path / "audit.db"
+    runner.invoke(app, ["db", "init", "--path", str(db_path)])
+
+    fixture = Path(__file__).parent / "fixtures" / "npm_event_stream_min.json"
+    data = json.loads(fixture.read_text("utf-8"))
+    monkeypatch.setattr(
+        "augit.collectors.npm.fetch_npm_json",
+        lambda _name: data,
+    )
+    monkeypatch.setattr(
+        "augit.package_links.fetch_npm_json",
+        lambda _name: data,
+    )
+
+    result = runner.invoke(
+        app,
+        ["--db", str(db_path), "collect", "npm", "event-stream", "--no-follow"],
+    )
+    assert result.exit_code == 0
+
+    from augit.db import DbConfig, connect
+    from augit.migrate import migrate
+    from augit.store import EventStore
+
+    conn = connect(DbConfig(path=db_path))
+    migrate(conn)
+    store = EventStore(conn)
+    pkg_key = RepoKey(canonical_url="event-stream", provider="npm")
+    events = list(store.iter_events_for_repo(pkg_key))
+    conn.close()
+    assert len(events) == 2
+    assert all(e["event_type"] == "npm_release_version" for e in events)

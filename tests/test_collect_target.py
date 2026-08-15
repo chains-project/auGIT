@@ -29,6 +29,13 @@ def test_parse_maven_prefix_and_gav():
     assert t2.key.canonical_url == "com.google.guava:guava"
 
 
+def test_parse_npm_prefix():
+    t = parse_collect_target("npm:event-stream")
+    assert t.provider == "npm"
+    assert t.key.canonical_url == "event-stream"
+    assert t.display == "npm:event-stream"
+
+
 def test_pick_primary_github_case_insensitive():
     candidates = [
         ("project_urls.Docs", "https://github.com/other/docs"),

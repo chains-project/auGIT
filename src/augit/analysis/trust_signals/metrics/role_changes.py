@@ -13,7 +13,7 @@ class RoleChangesMetric(TrustMetric):
         metric_id="role_changes",
         label="Role changes",
         category="governance",
-        description="New merge or release author vs. profile; short time-to-privilege (permission API proxy).",
+        description="New merge author vs. profile; short time-to-merge-privilege (permission API proxy).",
     )
 
     def detect(
@@ -26,33 +26,6 @@ class RoleChangesMetric(TrustMetric):
 
         evidence: list[str] = []
         comparisons: list[ComparisonRow] = []
-
-        for rel in timeline.releases:
-            author = rel.get("author_login")
-            dt = rel.get("published_dt")
-            if not author or not dt:
-                continue
-            if author not in profile.privileged_releasers:
-                tag = rel.get("tag_name")
-                evidence.append(
-                    f"{author}: published release {tag} on {format_dt(dt)} "
-                    f"(new release author vs. profile)"
-                )
-                comparisons.append(
-                    ComparisonRow(
-                        subject=f"{author} (release {tag})",
-                        baseline=(
-                            f"privileged releasers: "
-                            f"{', '.join(sorted(profile.privileged_releasers)) or 'none'}"
-                        ),
-                        observed=f"published {tag} on {format_dt(dt)}",
-                    )
-                )
-                first = profile.first_contribution_at.get(author)
-                if first and (dt - first).days <= SHORT_PRIVILEGE_DAYS:
-                    evidence.append(
-                        f"{author}: {(dt - first).days} days from first contribution to release"
-                    )
 
         for pr in timeline.merged_prs:
             author = pr.get("merged_by_login")
@@ -86,10 +59,10 @@ class RoleChangesMetric(TrustMetric):
 
         return [
             SignalDraft(
-                title="New merge or release capability",
+                title="New merge capability",
                 summary=(
-                    "Logins that publish releases or merge pull requests in the compare window "
-                    "but were not privileged in the baseline profile."
+                    "Logins that merge pull requests in the compare window "
+                    "but were not merge-privileged in the baseline profile."
                 ),
                 evidence=evidence[:12],
                 comparisons=comparisons[:12],

@@ -15,7 +15,7 @@ def _row(event_type: str, payload: dict, source_timestamp: str) -> dict:
     }
 
 
-def test_new_release_author_is_role_change_not_onboarding():
+def test_new_release_author_is_release_publisher_signal_not_onboarding():
     now = datetime(2026, 5, 1, tzinfo=UTC)
     old = (now - timedelta(days=400)).isoformat().replace("+00:00", "Z")
     recent = (now - timedelta(days=10)).isoformat().replace("+00:00", "Z")
@@ -45,10 +45,12 @@ def test_new_release_author_is_role_change_not_onboarding():
         as_of=now,
     )
     findings = detect_findings(timeline, context)
-    roles = [f for f in findings if f.metric_id == "role_changes"]
+    release_publishers = [
+        f for f in findings if f.metric_id == "unverified_release_publishers"
+    ]
     onboarding = [f for f in findings if f.metric_id == "onboarding"]
-    assert roles
-    assert any("right9ctrl" in e for e in roles[0].evidence)
+    assert release_publishers
+    assert any("right9ctrl" in e for e in release_publishers[0].evidence)
     assert not any("right9ctrl" in e for f in onboarding for e in f.evidence)
 
 

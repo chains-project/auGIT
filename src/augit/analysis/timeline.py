@@ -120,23 +120,25 @@ def load_timeline(rows: list[dict[str, Any]]) -> RepoTimeline:
                     "event_ts": ts,
                 }
             )
-        elif et in ("pypi_release_version", "maven_release_version"):
+        elif et in ("pypi_release_version", "maven_release_version", "npm_release_version"):
+            registry = "pypi" if et.startswith("pypi") else "maven" if et.startswith("maven") else "npm"
             timeline.registry_versions.append(
                 {
                     "version": payload.get("version"),
                     "published_at": payload.get("published_at")
-                    or payload.get("upload_time"),
+                    or payload.get("upload_time")
+                    or payload.get("publish_time"),
                     "published_dt": ts,
                     "author_login": payload.get("author_login"),
-                    "uploaders": payload.get("uploaders") or [],
-                    "registry": "pypi" if et.startswith("pypi") else "maven",
+                    "uploaders": payload.get("uploaders") or payload.get("maintainers") or [],
+                    "registry": registry,
                     "event_ts": ts,
                 }
             )
-        elif et == "pypi_project_missing":
+        elif et in ("pypi_project_missing", "npm_package_missing"):
             timeline.registry_missing.append(
                 {
-                    "registry": "pypi",
+                    "registry": "pypi" if et.startswith("pypi") else "npm",
                     "name": payload.get("name"),
                     "url": payload.get("url"),
                     "http_status": payload.get("http_status"),

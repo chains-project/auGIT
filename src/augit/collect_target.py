@@ -13,21 +13,31 @@ from augit.models import RepoKey
 class CollectTarget:
     """A resolved collect target."""
 
-    provider: str  # github | pypi | maven
+    provider: str  # github | pypi | maven | npm
     key: RepoKey
     display: str
 
 
 def parse_collect_target(raw: str) -> CollectTarget:
     """
-    Accept GitHub owner/repo or URL, ``pypi:name``, ``maven:g:a``, bare GAV,
-    or a bare PyPI package name.
+    Accept GitHub owner/repo or URL, ``pypi:name``, ``npm:name``, ``maven:g:a``,
+    bare GAV, or a bare PyPI package name.
     """
     s = raw.strip()
     if not s:
         raise ValueError("target must be non-empty")
 
     lower = s.lower()
+    if lower.startswith("npm:"):
+        name = s.split(":", 1)[1].strip()
+        if not name:
+            raise ValueError("npm target requires a package name")
+        return CollectTarget(
+            provider="npm",
+            key=RepoKey(canonical_url=name, provider="npm"),
+            display=f"npm:{name}",
+        )
+
     if lower.startswith("pypi:"):
         name = s.split(":", 1)[1].strip()
         if not name:

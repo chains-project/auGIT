@@ -8,9 +8,15 @@ from augit.cli.collect_github import collect_github_sources
 from augit.collect_target import CollectTarget, parse_collect_target
 from augit.collectors.github_api import GitHubClient
 from augit.collectors.maven import collect_maven_versions
+from augit.collectors.npm import collect_npm_versions
 from augit.collectors.pypi import collect_pypi_versions
 from augit.models import RepoKey
-from augit.package_links import discover_packages_for_github, link_maven_package, link_pypi_package
+from augit.package_links import (
+    discover_packages_for_github,
+    link_maven_package,
+    link_npm_package,
+    link_pypi_package,
+)
 from augit.store import EventStore
 
 
@@ -52,6 +58,19 @@ def _collect_maven_only(store: EventStore, gav: str) -> tuple[int, object]:
     store.set_cursor(pkg_key, "maven_versions", result.cursor)
     store.finish_run(run_id)
     link = link_maven_package(store, gav)
+    return inserted, link
+
+
+def _collect_npm_only(store: EventStore, name: str) -> tuple[int, object]:
+    pkg_key = RepoKey(canonical_url=name, provider="npm")
+    pkg_id = store.ensure_repo(pkg_key)
+    run_id = store.start_run(pkg_id, mode="incremental")
+    cursor = store.get_cursor(pkg_key, "npm_versions")
+    result = collect_npm_versions(package_name=name, cursor=cursor)
+    inserted = store.append_events(run_id, result.events)
+    store.set_cursor(pkg_key, "npm_versions", result.cursor)
+    store.finish_run(run_id)
+    link = link_npm_package(store, name)
     return inserted, link
 
 
@@ -134,6 +153,31 @@ def collect_linked(
             )
         return out
 
+    if target.provider == "npm":
+        inserted, link = _collect_npm_only(store, target.key.canonical_url)
+        linked_to = link.github_key.canonical_url if link.linked and link.github_key else None
+        out.sides.append(
+            CollectSideResult(
+                provider="npm",
+                display=target.display,
+                inserted=inserted,
+                linked_to=linked_to,
+                note=None if link.linked else "no github link in npm repository metadata",
+            )
+        )
+        if follow and link.linked and link.github_key is not None:
+            client = github_client or GitHubClient.from_env()
+            gh_inserted = _collect_github_only(store, client, link.github_key, source_list)
+            out.sides.append(
+                CollectSideResult(
+                    provider="github",
+                    display=link.github_key.canonical_url,
+                    inserted=gh_inserted,
+                    linked_to=target.display,
+                )
+            )
+        return out
+
     # GitHub
     client = github_client or GitHubClient.from_env()
     gh_inserted = _collect_github_only(store, client, target.key, source_list)
@@ -149,7 +193,7 @@ def collect_linked(
 
     discovered = discover_packages_for_github(store, target.key, max_packages=max_packages)
     if not discovered:
-        out.sides[-1].note = "no linked PyPI/Maven package found"
+        out.sides[-1].note = "no linked PyPI, Maven, or npm package found"
         return out
 
     for pkg in discovered:
@@ -170,6 +214,17 @@ def collect_linked(
                 CollectSideResult(
                     provider="maven",
                     display=f"maven:{pkg.name}",
+                    inserted=inserted,
+                    linked_to=target.display,
+                    note=f"via {pkg.source_field}",
+                )
+            )
+        elif pkg.provider == "npm":
+            inserted, _link = _collect_npm_only(store, pkg.name)
+            out.sides.append(
+                CollectSideResult(
+                    provider="npm",
+                    display=f"npm:{pkg.name}",
                     inserted=inserted,
                     linked_to=target.display,
                     note=f"via {pkg.source_field}",

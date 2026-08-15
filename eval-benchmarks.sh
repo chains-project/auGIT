@@ -20,10 +20,8 @@
 #   p2-tiledesk           Irregular commits
 #   p3-xz                 Onboarding of new contributors
 #   p4-ctx                Ownership changes
-#   p5-event-stream-role  Role changes
-#   p6-event-stream-pub   Unverified release publishers
+#   p568-event-stream  Role changes, Unverified release publishers, New dependency introduction
 #   p7-mrmustard          Unusual release pattern
-#   p8-event-stream-dep   New dependency introduction
 #   p9-tj-actions         History integrity
 #
 # Controls (benign; measured for FP/TN):
@@ -35,8 +33,8 @@
 
 set -euo pipefail
 
-EVAL_DB="${EVAL_DB:-./eval-benchmarks.db}"
-EVAL_OUT="${EVAL_OUT:-./eval-reports}"
+EVAL_DB="${EVAL_DB:-./eval-benchmarks-3.db}"
+EVAL_OUT="${EVAL_OUT:-./eval-reports-3}"
 CLI="${SSC_AUDIT_CLI:-uv run augit}"
 
 db() {
@@ -104,34 +102,21 @@ p4_ctx() {
     --tail-days 45
 }
 
-# Shared collect for event-stream (used by p5, p6, p8).
+# p5 — Role changes (event-stream maintainer handover → new merge maintainer activity)
+# p6 — Unverified release publishers (right9ctrl as new release author)
+# p8 — New dependency introduction (flatmap-stream added 2018-09-09)
 # Snyk postmortem: https://snyk.io/blog/a-post-mortem-of-the-malicious-event-stream-backdoor/
 #   ~2018-09: right9ctrl gains maintainer / npm publish rights
 #   2018-09-09: flatmap-stream added; event-stream 3.3.6 released
 #   2018-09-16: flatmap removed from tree; 4.0.0 released
 #   2018-11-26: npm notified / packages removed
-_event_stream_collect() {
+p568_event_stream() {
   db collect github dominictarr/event-stream --sources all
-}
-
-_event_stream_report() {
-  local out="$1"
+  db collect npm event-stream --no-follow
   db report dominictarr/event-stream \
-    --out "$out" \
+    --out "$EVAL_OUT/p568-event-stream.html" \
     --as-of 2018-11-26T00:00:00Z \
     --tail-days 90
-}
-
-# p5 — Role changes (event-stream maintainer handover → new merge/release author)
-p5_event_stream_role() {
-  _event_stream_collect
-  _event_stream_report "$EVAL_OUT/p5-event-stream-role-changes.html"
-}
-
-# p6 — Unverified release publishers (right9ctrl as new release author)
-p6_event_stream_pub() {
-  _event_stream_collect
-  _event_stream_report "$EVAL_OUT/p6-event-stream-unverified-publishers.html"
 }
 
 # p7 — Unusual release pattern
@@ -145,12 +130,6 @@ p7_mrmustard() {
     --out "$EVAL_OUT/p7-mrmustard-unusual-release.html" \
     --as-of 2026-07-24T23:59:00Z \
     --tail-days 14
-}
-
-# p8 — New dependency introduction (flatmap-stream added 2018-09-09)
-p8_event_stream_dep() {
-  _event_stream_collect
-  _event_stream_report "$EVAL_OUT/p8-event-stream-new-dependency.html"
 }
 
 # p9 — History integrity
@@ -172,10 +151,8 @@ positives() {
   p2_tiledesk
   p3_xz
   p4_ctx
-  p5_event_stream_role
-  p6_event_stream_pub
+  p568_event_stream
   p7_mrmustard
-  p8_event_stream_dep
   p9_tj_actions
 }
 
@@ -234,10 +211,8 @@ case "$cmd" in
   p2-tiledesk) p2_tiledesk ;;
   p3-xz) p3_xz ;;
   p4-ctx) p4_ctx ;;
-  p5-event-stream-role) p5_event_stream_role ;;
-  p6-event-stream-pub) p6_event_stream_pub ;;
+  p568-event-stream) p568_event_stream;;
   p7-mrmustard) p7_mrmustard ;;
-  p8-event-stream-dep) p8_event_stream_dep ;;
   p9-tj-actions) p9_tj_actions ;;
   n1_spoon) n1_spoon ;;
   n2_actions_checkout) n2_actions_checkout ;;

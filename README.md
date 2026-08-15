@@ -1,6 +1,6 @@
 # augit
 
-Append-only audit log for supply-chain signals from GitHub, PyPI, and Maven Central.
+Append-only audit log for supply-chain signals from GitHub, PyPI, Maven Central, and the npm registry.
 
 auGIT collects incremental events from package registries and GitHub repositories, stores them in a signed append-only SQLite log, and produces HTML trust reports with extensible governance metrics. See [framework.txt](framework.txt) for the design rationale and threat model.
 
@@ -54,10 +54,11 @@ augit export owner/repo --out events.jsonl
 | `collect github REPO [--sources ...] [--follow]` | Incremental GitHub collection |
 | `collect pypi NAME [--no-follow]` | PyPI version events (+ linked GitHub by default) |
 | `collect maven GAV [--no-follow]` | Maven version events (+ linked GitHub by default) |
+| `collect npm NAME [--no-follow]` | npm version events (+ linked GitHub by default) |
 | `report REPO --out FILE` | HTML trust report from audit log |
 | `check REPO` | Optional integrity check: compare recorded audit trail vs live refetch |
-| `link pypi NAME` / `link maven GAV` | Resolve package → GitHub URL |
-| `link show --provider pypi\|maven PACKAGE` | Show stored package link |
+| `link pypi NAME` / `link maven GAV` / `link npm NAME` | Resolve package → GitHub URL |
+| `link show --provider pypi\|maven\|npm PACKAGE` | Show stored package link |
 | `export REPO --out FILE` | Export events as JSONL |
 
 Global option: `--db PATH` (or `SSC_AUDIT_DB`).
@@ -102,7 +103,7 @@ Compares the **recorded audit trail** (from `collect`) against a **live refetch*
 
 The `dependencies` source finds ecosystem manifest changes on recently merged PRs **and** on commits that touch `package.json`, `requirements.txt`, `pyproject.toml`, or `pom.xml`, then appends `dependency_manifest_change` events. Direct edges are computed by comparing the full file at the parent commit vs the new commit (GitHub patch hunks alone are often incomplete JSON/XML). Lockfiles such as `package-lock.json` are ignored for edge detection.
 
-## PyPI / Maven ↔ GitHub workflow
+## Registry ↔ GitHub workflow
 
 `collect auto` accepts a GitHub repo **or** a registry package, resolves the link, and collects both sides:
 
@@ -110,11 +111,12 @@ The `dependencies` source finds ecosystem manifest changes on recently merged PR
 augit collect auto psf/requests              # GitHub → discover PyPI → collect both
 augit collect auto requests                  # PyPI → link GitHub → collect both
 augit collect auto pypi:ultralytics
+augit collect auto npm:event-stream          # npm → link GitHub → collect both
 augit collect auto com.google.guava:guava    # Maven GAV → link GitHub → collect both
 augit collect auto --no-follow requests      # registry only
 ```
 
-Explicit forms still work. `collect pypi` / `collect maven` follow the linked GitHub repo by default (`--no-follow` to skip). `collect github --follow` discovers linked packages.
+Explicit forms still work. `collect pypi`, `collect maven`, and `collect npm` follow the linked GitHub repo by default (`--no-follow` to skip). `collect github --follow` discovers linked packages.
 
 ```bash
 augit collect pypi requests
@@ -146,7 +148,7 @@ export GITHUB_TOKEN=ghp_...
 ./eval-benchmarks.sh p1-trivy
 ```
 
-Reports are written to `./eval-reports/` by default. Override paths with `EVAL_DB` and `EVAL_OUT`.
+Reports are written to `./eval-reports-2/` by default. Override paths with `EVAL_DB` and `EVAL_OUT`.
 
 | ID | Primary metric | Target | `as-of` (postmortem) |
 |----|----------------|--------|----------------------|

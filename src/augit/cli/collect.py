@@ -7,9 +7,10 @@ from augit.cli.context import AppContext
 from augit.collect_linked import collect_linked
 from augit.collectors.github_api import GitHubClient, github_repo_key
 from augit.collectors.maven import collect_maven_versions
+from augit.collectors.npm import collect_npm_versions
 from augit.collectors.pypi import collect_pypi_versions
 from augit.models import RepoKey
-from augit.package_links import link_maven_package, link_pypi_package
+from augit.package_links import link_maven_package, link_npm_package, link_pypi_package
 
 collect_app = typer.Typer(help="Collect audit events from external sources")
 
@@ -30,7 +31,7 @@ def collect_auto(
     target: str = typer.Argument(
         ...,
         help=(
-            "GitHub owner/repo or URL, PyPI name, pypi:name, "
+            "GitHub owner/repo or URL, PyPI name, pypi:name, npm:name, "
             "maven groupId:artifactId, or maven:g:a"
         ),
     ),
@@ -83,7 +84,7 @@ def collect_github(
     follow: bool = typer.Option(
         False,
         "--follow/--no-follow",
-        help="Also discover and collect linked PyPI/Maven packages",
+        help="Also discover and collect linked PyPI, Maven, and npm packages",
     ),
 ) -> None:
     app_ctx: AppContext = ctx.obj
@@ -217,5 +218,54 @@ def collect_maven(
         )
     else:
         typer.echo(f"no github link found for maven:{gav}")
+
+    typer.echo(f"inserted={inserted} run_id={run_id}")
+
+
+@collect_app.command("npm")
+def collect_npm(
+    ctx: typer.Context,
+    name: str = typer.Argument(..., help="npm package name"),
+    follow: bool = typer.Option(
+        True,
+        "--follow/--no-follow",
+        help="Also collect the linked GitHub repository when metadata provides one",
+    ),
+    sources: str = typer.Option(
+        "all",
+        "--sources",
+        help="GitHub sources used when --follow collects the linked repo",
+    ),
+) -> None:
+    app_ctx: AppContext = ctx.obj
+    store = app_ctx.store
+
+    if follow:
+        result = collect_linked(
+            store,
+            f"npm:{name}",
+            sources=parse_sources(sources),
+            follow=True,
+        )
+        _echo_linked_result(result)
+        return
+
+    pkg_key = RepoKey(canonical_url=name, provider="npm")
+    pkg_id = store.ensure_repo(pkg_key)
+    run_id = store.start_run(pkg_id, mode="incremental")
+
+    cursor = store.get_cursor(pkg_key, "npm_versions")
+    result = collect_npm_versions(package_name=name, cursor=cursor)
+    inserted = store.append_events(run_id, result.events)
+    store.set_cursor(pkg_key, "npm_versions", result.cursor)
+    store.finish_run(run_id)
+
+    link = link_npm_package(store, name)
+    if link.linked:
+        typer.echo(
+            f"linked npm:{name} -> {link.github_key.canonical_url} ({link.source_field})"
+        )
+    else:
+        typer.echo(f"no github link found for npm:{name}")
 
     typer.echo(f"inserted={inserted} run_id={run_id}")

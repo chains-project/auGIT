@@ -1,0 +1,54 @@
+{
+  "name": "event-stream",
+  "dist-tags": {
+    "latest": "4.0.1"
+  },
+  "versions": {
+    "3.3.4": {
+      "_npmUser": {
+        "name": "dominictarr"
+      },
+      "maintainers": [
+        {
+          "name": "dominictarr",
+          "email": "dominictarr@gmail.com"
+        }
+      ],
+      "repository": {
+        "type": "git",
+        "url": "git+https://github.com/dominictarr/event-stream.git"
+      }
+    },
+    "4.0.1": {
+      "_npmUser": {
+        "name": "right9ctrl"
+      },
+      "maintainers": [
+        {
+          "name": "right9ctrl",
+          "email": "right9ctrl@example.com"
+        }
+      ],
+      "repository": {
+        "type": "git",
+        "url": "git+https://github.com/dominictarr/event-stream.git"
+      }
+    }
+  },
+  "time": {
+    "created": "2011-03-04T00:00:00.000Z",
+    "modified": "2018-11-26T00:00:00.000Z",
+    "3.3.4": "2014-01-01T00:00:00.000Z",
+    "4.0.1": "2018-09-01T00:00:00.000Z"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/dominictarr/event-stream.git"
+  },
+  "maintainers": [
+    {
+      "name": "dominictarr",
+      "email": "dominictarr@gmail.com"
+    }
+  ]
+}
