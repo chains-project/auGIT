@@ -27,14 +27,15 @@
 # Controls (benign; measured for FP/TN):
 #   n1-spoon            INRIA/spoon
 #   n2-actions-checkout actions/checkout
-#   n3-requests        psf/requests
+#   n3-requests         psf/requests (PyPI + linked GitHub)
 #
+# Control window: CONTROL_AS_OF with CONTROL_TAIL_DAYS (default 60).
 # Timelines are taken from the cited postmortems (as-of = end of incident window).
 
 set -euo pipefail
 
-EVAL_DB="${EVAL_DB:-./eval-benchmarks-3.db}"
-EVAL_OUT="${EVAL_OUT:-./eval-reports-3}"
+EVAL_DB="${EVAL_DB:-./eval-benchmarks.db}"
+EVAL_OUT="${EVAL_OUT:-./eval-reports}"
 CLI="${SSC_AUDIT_CLI:-uv run augit}"
 
 db() {
@@ -111,8 +112,8 @@ p4_ctx() {
 #   2018-09-16: flatmap removed from tree; 4.0.0 released
 #   2018-11-26: npm notified / packages removed
 p568_event_stream() {
-  db collect github dominictarr/event-stream --sources all
-  db collect npm event-stream --no-follow
+  # GitHub + npm in one linked collect so report analysis sees both sides.
+  db collect auto npm:event-stream --sources all
   db report dominictarr/event-stream \
     --out "$EVAL_OUT/p568-event-stream.html" \
     --as-of 2018-11-26T00:00:00Z \
@@ -124,7 +125,7 @@ p568_event_stream() {
 # GitHub release. StepSecurity postmortem:
 # https://www.stepsecurity.io/blog/compromised-pypi-mrmustard-0-7-4-credential-stealer
 p7_mrmustard() {
-  # auto: GitHub + PyPI (name guess / metadata) in one step
+  # auto: GitHub + PyPI (name guess / metadata) in one step; report merges both.
   db collect auto XanaduAI/MrMustard --sources all
   db report XanaduAI/MrMustard \
     --out "$EVAL_OUT/p7-mrmustard-unusual-release.html" \
@@ -163,10 +164,11 @@ positives() {
 # Note: this does not guarantee "no findings". It only sets a pre-defined audit window
 # for projects that we label benign under the thesis protocol.
 CONTROL_AS_OF="2026-07-31T00:00:00Z"
-CONTROL_TAIL_DAYS="30"
+CONTROL_TAIL_DAYS="60"
 
 n1_spoon() {
-  db collect github INRIA/spoon --sources all
+  # Follow linked Maven packages when discovery finds them.
+  db collect github INRIA/spoon --sources all --follow
   db report INRIA/spoon \
     --out "$EVAL_OUT/n1-spoon-tn.html" \
     --as-of "$CONTROL_AS_OF" \
@@ -182,6 +184,7 @@ n2_actions_checkout() {
 }
 
 n3_psf_requests() {
+  # Collect PyPI + linked GitHub; report merges both sides via package_links.
   db collect auto requests --sources all
   db report requests \
     --provider "pypi" \

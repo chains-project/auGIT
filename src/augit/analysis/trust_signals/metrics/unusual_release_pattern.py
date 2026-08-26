@@ -4,7 +4,11 @@ from augit.analysis.profile import AuditContext, RepositoryProfile
 from augit.analysis.timeline import RepoTimeline
 from augit.analysis.trust_signals.finding import ComparisonRow
 from augit.analysis.trust_signals.metric import SignalDraft, TrustMetric
-from augit.analysis.trust_signals.metrics._helpers import format_dt
+from augit.analysis.trust_signals.metrics._helpers import (
+    format_dt,
+    has_matching_version_label,
+    version_labels_match,
+)
 from augit.analysis.trust_signals.registry import register_metric
 from augit.analysis.trust_signals.spec import MetricSpec
 
@@ -43,9 +47,9 @@ class UnusualReleasePatternMetric(TrustMetric):
 
         findings: list[SignalDraft] = []
 
-        window_tags = {
-            t.get("tag_name"): t.get("sha") for t in timeline.tags if t.get("tag_name")
-        }
+        window_tag_names = [
+            t.get("tag_name") for t in timeline.tags if t.get("tag_name")
+        ]
 
         for rel in timeline.releases:
             tag = rel.get("tag_name")
@@ -57,20 +61,20 @@ class UnusualReleasePatternMetric(TrustMetric):
             if (
                 profile.release_baseline.tag_aligned_releases
                 and tag
-                and tag not in window_tags
+                and not has_matching_version_label(tag, window_tag_names)
             ):
                 findings.append(
                     SignalDraft(
                         title="Release without matching tag in window",
                         summary=(
-                            f"Release {tag} by {author} has no corresponding tag event in the compare window."
+                            f"Release {tag} by {author} has no corresponding Git tag."
                         ),
                         evidence=[f"published {format_dt(dt)}"],
                         comparisons=[
                             ComparisonRow(
                                 subject=f"release {tag}",
                                 baseline="releases typically have matching tag events",
-                                observed=f"release by {author} on {format_dt(dt)}; no tag in window",
+                                observed=f"release by {author} on {format_dt(dt)}; no matching tag",
                             )
                         ],
                     )
@@ -147,15 +151,18 @@ class UnusualReleasePatternMetric(TrustMetric):
         for reg in timeline.registry_versions:
             version = reg.get("version")
             if version and profile.release_baseline.tag_aligned_releases:
-                matching_tag = version in window_tags or any(
-                    r.get("tag_name") == version for r in timeline.releases
+                matching_tag = has_matching_version_label(
+                    version, window_tag_names
+                ) or any(
+                    version_labels_match(version, r.get("tag_name"))
+                    for r in timeline.releases
                 )
                 if not matching_tag:
                     findings.append(
                         SignalDraft(
                             title="Registry version without matching tag",
                             summary=(
-                                f"Registry version {version} has no matching Git tag in the compare window."
+                                f"Registry version {version} has no matching Git tag."
                             ),
                             evidence=[f"registry={reg.get('registry')}"],
                             comparisons=[

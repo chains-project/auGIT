@@ -68,6 +68,7 @@ class NewDependencyIntroductionMetric(TrustMetric):
             not evidence
             and timeline.registry_versions
             and not timeline.dependency_changes
+            and not profile.dependency_edges
         ):
             versions = timeline.registry_versions[-3:]
             lines = [f"{v.get('version')} at {v.get('published_at')}" for v in versions]

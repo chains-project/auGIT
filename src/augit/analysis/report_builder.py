@@ -61,7 +61,7 @@ def build_trust_report(
     options: ReportOptions | None = None,
 ) -> TrustReport:
     opts = options or ReportOptions()
-    rows = list(store.iter_events_for_repo(repo))
+    rows = _audit_event_rows(store, repo)
     timeline = load_timeline(rows)
     audit_state = store.get_audit_state(repo)
 
@@ -137,6 +137,24 @@ def build_trust_report(
         )
 
     return report
+
+
+def _linked_repo_keys(store: EventStore, repo: RepoKey) -> list[RepoKey]:
+    """Return package↔GitHub counterparts that should share one audit view."""
+    if repo.provider == "github":
+        return store.get_packages_for_github(repo)
+    if repo.provider in ("pypi", "maven", "npm"):
+        github = store.get_github_for_package(repo)
+        return [github] if github is not None else []
+    return []
+
+
+def _audit_event_rows(store: EventStore, repo: RepoKey) -> list[dict[str, Any]]:
+    """Load events for *repo* plus linked GitHub/registry counterparts."""
+    rows = list(store.iter_events_for_repo(repo))
+    for linked in _linked_repo_keys(store, repo):
+        rows.extend(store.iter_events_for_repo(linked))
+    return rows
 
 
 def _snapshot_profile_for_checkpoint(

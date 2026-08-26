@@ -107,3 +107,125 @@ def test_release_burst_groups_multiple_bursts_per_author():
     assert len(burst_findings) == 1
     assert "4 releases across 2 bursts within 7 days" in burst_findings[0].summary
     assert len(burst_findings[0].evidence) == 2
+
+
+def test_registry_version_matches_v_prefixed_git_tag():
+    now = datetime(2026, 5, 1, tzinfo=UTC)
+    old = (now - timedelta(days=200)).isoformat().replace("+00:00", "Z")
+    recent = (now - timedelta(days=10)).isoformat().replace("+00:00", "Z")
+    timeline = load_timeline(
+        [
+            _row(
+                "github_release",
+                {
+                    "tag_name": "v2.30.0",
+                    "author_login": "alice",
+                    "published_at": old,
+                },
+                old,
+            ),
+            _row(
+                "github_tag",
+                {"tag_name": "v2.30.0", "sha": "aaa"},
+                old,
+            ),
+            _row(
+                "pypi_release_version",
+                {
+                    "version": "2.30.0",
+                    "package": "requests",
+                    "published_at": old,
+                    "uploaders": ["alice"],
+                },
+                old,
+            ),
+            _row(
+                "github_tag",
+                {"tag_name": "v2.34.2", "sha": "bbb"},
+                recent,
+            ),
+            _row(
+                "pypi_release_version",
+                {
+                    "version": "2.34.2",
+                    "package": "requests",
+                    "published_at": recent,
+                    "uploaders": ["alice"],
+                },
+                recent,
+            ),
+        ]
+    )
+    context = resolve_audit_context(
+        mode="initial",
+        timeline=timeline,
+        tail_days=90,
+        as_of=now,
+    )
+    findings = detect_findings(timeline, context)
+    missing = [
+        f
+        for f in findings
+        if f.metric_id == "unusual_release_pattern"
+        and f.title == "Registry version without matching tag"
+    ]
+    assert missing == []
+
+
+def test_registry_version_still_flags_when_no_tag_exists():
+    now = datetime(2026, 5, 1, tzinfo=UTC)
+    old = (now - timedelta(days=200)).isoformat().replace("+00:00", "Z")
+    recent = (now - timedelta(days=10)).isoformat().replace("+00:00", "Z")
+    timeline = load_timeline(
+        [
+            _row(
+                "github_release",
+                {
+                    "tag_name": "v1.0.0",
+                    "author_login": "alice",
+                    "published_at": old,
+                },
+                old,
+            ),
+            _row(
+                "github_tag",
+                {"tag_name": "v1.0.0", "sha": "aaa"},
+                old,
+            ),
+            _row(
+                "pypi_release_version",
+                {
+                    "version": "1.0.0",
+                    "package": "demo",
+                    "published_at": old,
+                    "uploaders": ["alice"],
+                },
+                old,
+            ),
+            _row(
+                "pypi_release_version",
+                {
+                    "version": "9.9.9",
+                    "package": "demo",
+                    "published_at": recent,
+                    "uploaders": ["alice"],
+                },
+                recent,
+            ),
+        ]
+    )
+    context = resolve_audit_context(
+        mode="initial",
+        timeline=timeline,
+        tail_days=90,
+        as_of=now,
+    )
+    findings = detect_findings(timeline, context)
+    missing = [
+        f
+        for f in findings
+        if f.metric_id == "unusual_release_pattern"
+        and f.title == "Registry version without matching tag"
+    ]
+    assert len(missing) == 1
+    assert "9.9.9" in missing[0].summary

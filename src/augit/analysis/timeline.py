@@ -207,7 +207,11 @@ def filter_timeline_by_window(
     """Return a shallow copy containing only events in [since, until].
 
     ``registry_missing`` is passed through unfiltered: a PyPI 404 reflects
-  current registry state and should surface even in retrospective reports.
+    current registry state and should surface even in retrospective reports.
+
+    ``tags`` are also kept unfiltered. GitHub tag collection often has no
+    reliable source timestamp, so window filtering would drop the whole tag
+    inventory and break registry/release tag-alignment checks.
     """
 
     def in_window(ts: datetime | None) -> bool:
@@ -231,7 +235,7 @@ def filter_timeline_by_window(
         closed_prs=filt(timeline.closed_prs),
         commits=filt(timeline.commits),
         releases=filt(timeline.releases),
-        tags=filt(timeline.tags),
+        tags=list(timeline.tags),
         registry_versions=filt(timeline.registry_versions),
         registry_missing=list(timeline.registry_missing),
         dependency_changes=filt(timeline.dependency_changes),
