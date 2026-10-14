@@ -229,3 +229,182 @@ def test_registry_version_still_flags_when_no_tag_exists():
     ]
     assert len(missing) == 1
     assert "9.9.9" in missing[0].summary
+
+
+def test_short_tag_to_registry_delay_flags_when_below_baseline():
+    now = datetime(2026, 6, 1, tzinfo=UTC)
+    # Baseline: two releases with ~10-day delays to registry.
+    b1_rel = (now - timedelta(days=200)).isoformat().replace("+00:00", "Z")
+    b1_reg = (now - timedelta(days=190)).isoformat().replace("+00:00", "Z")
+    b2_rel = (now - timedelta(days=150)).isoformat().replace("+00:00", "Z")
+    b2_reg = (now - timedelta(days=140)).isoformat().replace("+00:00", "Z")
+    # Window: matching release/registry with ~0-day delay.
+    w_rel = (now - timedelta(days=10)).isoformat().replace("+00:00", "Z")
+    w_reg = (now - timedelta(days=10)).isoformat().replace("+00:00", "Z")
+    timeline = load_timeline(
+        [
+            _row(
+                "github_release",
+                {
+                    "tag_name": "v1.0.0",
+                    "author_login": "alice",
+                    "published_at": b1_rel,
+                },
+                b1_rel,
+            ),
+            _row(
+                "pypi_release_version",
+                {
+                    "version": "1.0.0",
+                    "package": "demo",
+                    "published_at": b1_reg,
+                    "uploaders": ["alice"],
+                },
+                b1_reg,
+            ),
+            _row(
+                "github_release",
+                {
+                    "tag_name": "v1.1.0",
+                    "author_login": "alice",
+                    "published_at": b2_rel,
+                },
+                b2_rel,
+            ),
+            _row(
+                "pypi_release_version",
+                {
+                    "version": "1.1.0",
+                    "package": "demo",
+                    "published_at": b2_reg,
+                    "uploaders": ["alice"],
+                },
+                b2_reg,
+            ),
+            _row(
+                "github_release",
+                {
+                    "tag_name": "v1.2.0",
+                    "author_login": "alice",
+                    "published_at": w_rel,
+                },
+                w_rel,
+            ),
+            _row(
+                "github_tag",
+                {"tag_name": "v1.2.0", "sha": "ccc"},
+                w_rel,
+            ),
+            _row(
+                "pypi_release_version",
+                {
+                    "version": "1.2.0",
+                    "package": "demo",
+                    "published_at": w_reg,
+                    "uploaders": ["alice"],
+                },
+                w_reg,
+            ),
+        ]
+    )
+    context = resolve_audit_context(
+        mode="initial",
+        timeline=timeline,
+        tail_days=90,
+        as_of=now,
+    )
+    assert context.baseline_profile.release_baseline.median_tag_registry_delay_days == 10.0
+    findings = detect_findings(timeline, context)
+    short = [
+        f
+        for f in findings
+        if f.metric_id == "unusual_release_pattern"
+        and f.title == "Short tag-to-registry delay"
+    ]
+    assert len(short) == 1
+    assert "1.2.0" in short[0].summary
+
+
+def test_unusual_version_jump_flags_major_skip():
+    now = datetime(2026, 6, 1, tzinfo=UTC)
+    old = (now - timedelta(days=200)).isoformat().replace("+00:00", "Z")
+    recent = (now - timedelta(days=5)).isoformat().replace("+00:00", "Z")
+    timeline = load_timeline(
+        [
+            _row(
+                "github_release",
+                {
+                    "tag_name": "v1.4.0",
+                    "author_login": "alice",
+                    "published_at": old,
+                },
+                old,
+            ),
+            _row(
+                "github_release",
+                {
+                    "tag_name": "v3.0.0",
+                    "author_login": "alice",
+                    "published_at": recent,
+                },
+                recent,
+            ),
+        ]
+    )
+    context = resolve_audit_context(
+        mode="initial",
+        timeline=timeline,
+        tail_days=90,
+        as_of=now,
+    )
+    findings = detect_findings(timeline, context)
+    jumps = [
+        f
+        for f in findings
+        if f.metric_id == "unusual_release_pattern"
+        and f.title == "Unusual version jump"
+    ]
+    assert len(jumps) == 1
+    assert "v3.0.0" in jumps[0].summary
+
+
+def test_out_of_order_version_flags_regression():
+    now = datetime(2026, 6, 1, tzinfo=UTC)
+    old = (now - timedelta(days=200)).isoformat().replace("+00:00", "Z")
+    recent = (now - timedelta(days=5)).isoformat().replace("+00:00", "Z")
+    timeline = load_timeline(
+        [
+            _row(
+                "github_release",
+                {
+                    "tag_name": "v2.1.0",
+                    "author_login": "alice",
+                    "published_at": old,
+                },
+                old,
+            ),
+            _row(
+                "github_release",
+                {
+                    "tag_name": "v2.0.0",
+                    "author_login": "alice",
+                    "published_at": recent,
+                },
+                recent,
+            ),
+        ]
+    )
+    context = resolve_audit_context(
+        mode="initial",
+        timeline=timeline,
+        tail_days=90,
+        as_of=now,
+    )
+    findings = detect_findings(timeline, context)
+    out_of_order = [
+        f
+        for f in findings
+        if f.metric_id == "unusual_release_pattern" and f.title == "Out-of-order version"
+    ]
+    assert len(out_of_order) == 1
+    assert "v2.0.0" in out_of_order[0].summary

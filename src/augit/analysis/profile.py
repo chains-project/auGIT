@@ -10,8 +10,8 @@ from typing import Any, Literal
 from pydantic import BaseModel, Field
 
 from augit.analysis.timeline import RepoTimeline, event_timestamp, parse_dt
+from augit.analysis.version_labels import normalize_version_label, parse_version_tuple
 from augit.signing import normalize_signing_key_id
-
 DEFAULT_TAIL_DAYS = 90
 SHORT_PRIVILEGE_DAYS = 14
 
@@ -35,8 +35,11 @@ class PrReviewProfile(BaseModel):
 
 class ReleaseBaseline(BaseModel):
     median_inter_release_days: float | None = None
+    median_tag_registry_delay_days: float | None = None
     typical_version_prefix: str | None = None
     tag_aligned_releases: bool = True
+    latest_version_tuple: tuple[int, int, int] | None = None
+    latest_version_label: str | None = None
 
 
 class RepositoryProfile(BaseModel):
@@ -323,6 +326,70 @@ def build_profile(
     if baseline_releases:
         sample = baseline_releases[0].get("tag_name") or ""
         profile.release_baseline.typical_version_prefix = _version_prefix(sample)
+
+    release_time_by_version: dict[str, datetime] = {}
+    for rel in baseline_releases:
+        tag = rel.get("tag_name")
+        dt = rel.get("published_dt")
+        if not tag or not dt:
+            continue
+        key = normalize_version_label(tag)
+        prev = release_time_by_version.get(key)
+        if prev is None or dt < prev:
+            release_time_by_version[key] = dt
+    for tag in baseline_tags:
+        name = tag.get("tag_name")
+        dt = tag.get("event_ts")
+        if not name or not dt:
+            continue
+        key = normalize_version_label(name)
+        if key in release_time_by_version:
+            continue
+        release_time_by_version[key] = dt
+
+    tag_registry_delays: list[float] = []
+    for reg in baseline_registry:
+        version = reg.get("version")
+        pub = reg.get("published_dt")
+        if not version or not pub:
+            continue
+        release_dt = release_time_by_version.get(normalize_version_label(version))
+        if release_dt is None:
+            continue
+        delay_days = (pub - release_dt).total_seconds() / 86400.0
+        if delay_days < 0:
+            delay_days = 0.0
+        tag_registry_delays.append(delay_days)
+    if len(tag_registry_delays) >= 2:
+        profile.release_baseline.median_tag_registry_delay_days = float(
+            statistics.median(tag_registry_delays)
+        )
+
+    latest_label: str | None = None
+    latest_tuple: tuple[int, int, int] | None = None
+    latest_dt: datetime | None = None
+    for rel in baseline_releases:
+        label = rel.get("tag_name")
+        dt = rel.get("published_dt")
+        parsed = parse_version_tuple(label)
+        if parsed is None or dt is None:
+            continue
+        if latest_dt is None or dt > latest_dt:
+            latest_dt = dt
+            latest_label = label
+            latest_tuple = parsed
+    for reg in baseline_registry:
+        label = reg.get("version")
+        dt = reg.get("published_dt")
+        parsed = parse_version_tuple(label)
+        if parsed is None or dt is None:
+            continue
+        if latest_dt is None or dt > latest_dt:
+            latest_dt = dt
+            latest_label = label
+            latest_tuple = parsed
+    profile.release_baseline.latest_version_label = latest_label
+    profile.release_baseline.latest_version_tuple = latest_tuple
 
     for reg in baseline_registry:
         for uploader in reg.get("uploaders") or []:

@@ -95,14 +95,9 @@ class NewDependencyIntroductionMetric(TrustMetric):
         if not evidence:
             return []
 
-        footprint_growth = len(profile.dependency_edges | new_edges) - len(
-            profile.dependency_edges
-        )
         summary = (
             f"{len(new_edges)} new direct dependency edge(s) in the compare window."
         )
-        if footprint_growth > 5:
-            summary += f" Footprint grew by {footprint_growth} edges vs. baseline."
 
         return [
             SignalDraft(

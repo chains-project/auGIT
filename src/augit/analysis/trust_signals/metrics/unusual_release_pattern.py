@@ -11,8 +11,12 @@ from augit.analysis.trust_signals.metrics._helpers import (
 )
 from augit.analysis.trust_signals.registry import register_metric
 from augit.analysis.trust_signals.spec import MetricSpec
+from augit.analysis.version_labels import normalize_version_label, parse_version_tuple
 
 RELEASE_BURST_DAYS = 7
+SHORT_TAG_REGISTRY_FRACTION = 0.25
+MIN_BASELINE_TAG_REGISTRY_MEDIAN_DAYS = 1.0
+VERSION_MAJOR_JUMP = 1
 
 
 def _release_burst_clusters(dates: list) -> list[list]:
@@ -28,13 +32,40 @@ def _release_burst_clusters(dates: list) -> list[list]:
     return [cluster for cluster in clusters if len(cluster) >= 2]
 
 
+def _release_time_by_version(timeline: RepoTimeline) -> dict[str, object]:
+    """Map normalized version label -> earliest release/tag timestamp."""
+    times: dict[str, object] = {}
+    for rel in timeline.releases:
+        tag = rel.get("tag_name")
+        dt = rel.get("published_dt")
+        if not tag or not dt:
+            continue
+        key = normalize_version_label(tag)
+        prev = times.get(key)
+        if prev is None or dt < prev:
+            times[key] = dt
+    for tag in timeline.tags:
+        name = tag.get("tag_name")
+        dt = tag.get("event_ts")
+        if not name or not dt:
+            continue
+        key = normalize_version_label(name)
+        if key in times:
+            continue
+        times[key] = dt
+    return times
+
+
 @register_metric
 class UnusualReleasePatternMetric(TrustMetric):
     spec = MetricSpec(
         metric_id="unusual_release_pattern",
         label="Unusual release pattern",
         category="release",
-        description="Tag/registry coupling anomalies, version gaps, and release bursts vs. profile.",
+        description=(
+            "Tag/registry coupling, short tag-to-registry delay, version jumps, "
+            "and release bursts vs. profile."
+        ),
     )
 
     def detect(
@@ -74,7 +105,10 @@ class UnusualReleasePatternMetric(TrustMetric):
                             ComparisonRow(
                                 subject=f"release {tag}",
                                 baseline="releases typically have matching tag events",
-                                observed=f"release by {author} on {format_dt(dt)}; no matching tag",
+                                observed=(
+                                    f"release by {author} on {format_dt(dt)}. "
+                                    "no matching tag"
+                                ),
                             )
                         ],
                     )
@@ -134,7 +168,10 @@ class UnusualReleasePatternMetric(TrustMetric):
                     findings.append(
                         SignalDraft(
                             title="Release after long gap",
-                            summary=f"Gap of {gap} days since prior release exceeds project baseline.",
+                            summary=(
+                                f"Gap of {gap} days since prior release exceeds "
+                                "project baseline."
+                            ),
                             evidence=[
                                 f"between {format_dt(all_dates[-2])} and {format_dt(all_dates[-1])}"
                             ],
@@ -169,10 +206,124 @@ class UnusualReleasePatternMetric(TrustMetric):
                                 ComparisonRow(
                                     subject=f"version {version}",
                                     baseline="registry versions typically have matching tags",
-                                    observed=f"{reg.get('registry')} version {version} without tag",
+                                    observed=(
+                                        f"{reg.get('registry')} version {version} "
+                                        "without tag"
+                                    ),
                                 )
                             ],
                         )
                     )
+
+        release_times = _release_time_by_version(timeline)
+        median_delay = profile.release_baseline.median_tag_registry_delay_days
+        if (
+            median_delay is not None
+            and median_delay >= MIN_BASELINE_TAG_REGISTRY_MEDIAN_DAYS
+        ):
+            short_limit = median_delay * SHORT_TAG_REGISTRY_FRACTION
+            for reg in timeline.registry_versions:
+                version = reg.get("version")
+                pub = reg.get("published_dt")
+                if not version or not pub:
+                    continue
+                release_dt = release_times.get(normalize_version_label(version))
+                if release_dt is None:
+                    continue
+                delay_days = (pub - release_dt).total_seconds() / 86400.0
+                if delay_days < 0:
+                    delay_days = 0.0
+                if delay_days >= short_limit:
+                    continue
+                findings.append(
+                    SignalDraft(
+                        title="Short tag-to-registry delay",
+                        summary=(
+                            f"Registry version {version} appeared "
+                            f"{delay_days:.1f} days after the matching release/tag, "
+                            f"below the project baseline median of {median_delay:.1f} days."
+                        ),
+                        evidence=[
+                            f"registry={reg.get('registry')}",
+                            f"release/tag at {format_dt(release_dt)}",
+                            f"registry at {format_dt(pub)}",
+                        ],
+                        comparisons=[
+                            ComparisonRow(
+                                subject=f"version {version}",
+                                baseline=(
+                                    f"median tag-to-registry delay: "
+                                    f"{median_delay:.1f} days"
+                                ),
+                                observed=f"delay of {delay_days:.1f} days",
+                            )
+                        ],
+                    )
+                )
+
+        version_events: list[tuple[object, str, str]] = []
+        for rel in timeline.releases:
+            label = rel.get("tag_name")
+            dt = rel.get("published_dt")
+            parsed = parse_version_tuple(label)
+            if label and dt and parsed is not None:
+                version_events.append((dt, label, "GitHub release"))
+        for reg in timeline.registry_versions:
+            label = reg.get("version")
+            dt = reg.get("published_dt")
+            parsed = parse_version_tuple(label)
+            if label and dt and parsed is not None:
+                version_events.append(
+                    (dt, label, f"{reg.get('registry') or 'registry'} version")
+                )
+        version_events.sort(key=lambda item: item[0])
+
+        prev_label = profile.release_baseline.latest_version_label
+        prev_tuple = profile.release_baseline.latest_version_tuple
+        for dt, label, source in version_events:
+            current = parse_version_tuple(label)
+            if current is None:
+                continue
+            if prev_tuple is not None and prev_label is not None:
+                if current < prev_tuple:
+                    findings.append(
+                        SignalDraft(
+                            title="Out-of-order version",
+                            summary=(
+                                f"{source} {label} sorts below prior version "
+                                f"{prev_label}."
+                            ),
+                            evidence=[f"published {format_dt(dt)}"],
+                            comparisons=[
+                                ComparisonRow(
+                                    subject=label,
+                                    baseline=f"prior published version: {prev_label}",
+                                    observed=f"{source} on {format_dt(dt)}",
+                                )
+                            ],
+                        )
+                    )
+                elif current[0] - prev_tuple[0] > VERSION_MAJOR_JUMP:
+                    findings.append(
+                        SignalDraft(
+                            title="Unusual version jump",
+                            summary=(
+                                f"{source} {label} jumps major version from "
+                                f"{prev_label}."
+                            ),
+                            evidence=[f"published {format_dt(dt)}"],
+                            comparisons=[
+                                ComparisonRow(
+                                    subject=label,
+                                    baseline=f"prior published version: {prev_label}",
+                                    observed=(
+                                        f"major jump to {label} on {format_dt(dt)}"
+                                    ),
+                                )
+                            ],
+                        )
+                    )
+            prev_label = label
+            prev_tuple = current
 
         return findings
